@@ -3,64 +3,97 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b4f6c">
 <title>FixMyCity — Admin dashboard</title>
 <link rel="stylesheet" href="/static/style.css">
+<link rel="manifest" href="/static/manifest.webmanifest">
 </head>
-<body>
-<main class="wrap wide">
-  <h1>FixMyCity <span class="tag">Admin</span></h1>
-  <p class="muted">Incidents sorted by urgency. <span class="tag seed">seed</span> = synthetic demo data, <span class="tag live">live</span> = real submissions. Context data is SYNTHETIC.</p>
-  <div id="list">loading…</div>
+<body class="admin-page">
+<main class="wrap wide xp-window">
+  <div class="xp-titlebar">
+    <div class="xp-title"><span class="xp-title-icon">🖥️</span><strong>FixMyCity — City Operations Center</strong></div>
+  </div>
+  <div class="xp-toolbar"><span>Operations Center</span><span class="toolbar-spacer"></span><span class="toolbar-status">Lightweight • Hyderabad</span></div>
+  <header class="admin-header">
+    <div class="brand-lockup">
+      <img src="/static/logo.png" class="brand-logo" alt="FixMyCity logo" onerror="this.style.display='none'">
+      <div><div class="eyebrow">Hyderabad Civic Operations</div><h1>FixMyCity <span class="tag admin-tag">Admin</span></h1></div>
+    </div>
+    <a class="button-link light-link" href="/">Citizen report ↗</a>
+  </header>
+
+  <section class="dashboard-hero">
+    <div><span class="hero-kicker">Incident command view</span><h2>Prioritize the problems. Not the noise.</h2><p>Tickets are ranked using evidence, risk and synthetic city context. <span class="tag seed">seed</span> = demo data · <span class="tag live">live</span> = real submission.</p></div>
+    <div class="hero-note">Context data is <b>SYNTHETIC</b>.</div>
+  </section>
+
+  <section id="summary" class="metric-grid"><div class="metric"><span>Total incidents</span><b>—</b></div><div class="metric urgent"><span>Urgent (4–5)</span><b>—</b></div><div class="metric review-metric"><span>Needs review</span><b>—</b></div><div class="metric"><span>Open</span><b>—</b></div></section>
+  <div id="list" class="incident-list">loading…</div>
+  <div class="xp-statusbar"><span>Auto-refresh: 15s</span><span>FixMyCity • Hyderabad</span></div>
 </main>
 
 <script>
 const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const $ = id => document.getElementById(id);
+
+function photoMarkup(i) {
+  if (!i.photo_path) return '<div class="photo-empty"><span>📷</span><small>No photo attached</small></div>';
+  const src = '/uploads/' + encodeURIComponent(i.photo_path);
+  return '<a class="photo-frame" href="' + src + '" target="_blank" rel="noopener"><img src="' + src + '" alt="Evidence photo for incident #' + i.id + '" loading="lazy" onerror="this.closest(\'.photo-frame\').classList.add(\'broken\')"></a>';
+}
+
+function updateSummary(items) {
+  const el = $('summary');
+  const urgent = items.filter(i => i.urgency >= 4).length;
+  const review = items.filter(i => i.review_flag).length;
+  const open = items.filter(i => i.status === 'open').length;
+  el.innerHTML = `<div class="metric"><span>Total incidents</span><b>${items.length}</b></div><div class="metric urgent"><span>Urgent (4–5)</span><b>${urgent}</b></div><div class="metric review-metric"><span>Needs review</span><b>${review}</b></div><div class="metric"><span>Open</span><b>${open}</b></div>`;
+}
 
 async function load() {
   try {
     const r = await fetch('/api/incidents');
     const d = await r.json();
-    if (!d.incidents.length) { $('list').innerHTML = '<p class="muted">No incidents yet.</p>'; return; }
+    updateSummary(d.incidents);
+    if (!d.incidents.length) { $('list').innerHTML = '<div class="empty-state">No incidents yet.</div>'; return; }
     $('list').innerHTML = d.incidents.map(i => {
       const reasons = i.severity && i.severity.dimensions
-        ? Object.entries(i.severity.dimensions).map(([k, v]) =>
-            (v.reasons || []).map(x => '<li><b>' + esc(k) + '</b>: ' + esc(x) + '</li>').join('')).join('')
-          + (i.severity.overrides || []).map(o => '<li><b>override</b>: ' + esc(o) + '</li>').join('')
-        : '';
-      const photo = i.photo_path ? '<a href="/uploads/' + esc(i.photo_path) + '" target="_blank">photo</a>' : '';
-      return '<div class="card' + (i.review_flag ? ' needsreview' : '') + '">' +
-        '<div class="cardhead">' +
-        '<span class="badge sev' + i.urgency + '">urgency ' + i.urgency + '</span>' +
-        '<b>#' + i.id + ' ' + esc(i.issue_type) + '</b>' +
-        '<span class="tag ' + (i.source === 'seed' ? 'seed' : 'live') + '">' + esc(i.source) + '</span>' +
-        (i.review_flag ? '<span class="badge review">review' + (i.verification === 'urgent' ? ' URGENT' : '') + '</span>' : '') +
-        '</div>' +
-        '<p>' + esc(i.summary) + '</p>' +
-        '<div class="meta">owner: <b>' + esc(i.service_owner) + '</b> · reports: ' + i.report_count +
-        ' · confidence: ' + i.confidence + ' · zone: ' + esc(i.context.zone || '?') +
-        ' · status: ' + esc(i.status) + ' ' + photo + '</div>' +
-        (reasons ? '<ul class="kv small">' + reasons + '</ul>' : '') +
-        '<div class="row">' +
-        '<button onclick="setStatus(' + i.id + ',\'in_progress\')">in progress</button>' +
-        '<button onclick="setStatus(' + i.id + ',\'resolved\')">resolve</button>' +
-        '<button onclick="setStatus(' + i.id + ',\'open\')">reopen</button>' +
-        '</div></div>';
+        ? Object.entries(i.severity.dimensions).map(([k, v]) => (v.reasons || []).map(x => '<li><b>' + esc(k) + '</b>: ' + esc(x) + '</li>').join('')).join('')
+          + (i.severity.overrides || []).map(o => '<li><b>override</b>: ' + esc(o) + '</li>').join('') : '';
+      const sevLabel = i.urgency >= 5 ? 'Critical' : i.urgency >= 4 ? 'High' : i.urgency >= 3 ? 'Moderate' : 'Low';
+      return '<article class="incident-card ' + (i.review_flag ? 'needsreview' : '') + '">' +
+        '<div class="incident-visual">' + photoMarkup(i) + '</div>' +
+        '<div class="incident-body">' +
+          '<div class="cardhead"><span class="badge sev' + i.urgency + '">' + sevLabel + ' · ' + i.urgency + '/5</span><span class="issue-title">#' + i.id + ' ' + esc(i.issue_type) + '</span><span class="tag ' + (i.source === 'seed' ? 'seed' : 'live') + '">' + esc(i.source) + '</span>' + (i.review_flag ? '<span class="badge review">review' + (i.verification === 'urgent' ? ' urgent' : '') + '</span>' : '') + '</div>' +
+          '<p class="incident-summary">' + esc(i.summary) + '</p>' +
+          '<div class="meta-grid"><span><b>Owner</b>' + esc(i.service_owner) + '</span><span><b>Zone</b>' + esc((i.context || {}).zone || '?') + '</span><span><b>Reports</b>' + i.report_count + '</span><span><b>Confidence</b>' + i.confidence + '</span><span><b>Traffic</b>' + esc((i.context || {}).traffic || '—') + '</span><span><b>Status</b>' + esc(i.status) + '</span></div>' +
+          (reasons ? '<details class="reason-panel"><summary>Why this priority</summary><ul class="kv small">' + reasons + '</ul></details>' : '') +
+          '<div class="row actions status-actions">' +
+            '<button class="status-btn status-open ' + (i.status === 'open' ? 'active' : '') + '" onclick="setStatus(' + i.id + ',\'open\', this)">Open</button>' +
+            '<button class="status-btn status-progress ' + (i.status === 'in_progress' ? 'active' : '') + '" onclick="setStatus(' + i.id + ',\'in_progress\', this)">In progress</button>' +
+            '<button class="status-btn status-resolved ' + (i.status === 'resolved' ? 'active' : '') + '" onclick="setStatus(' + i.id + ',\'resolved\', this)">Resolved</button>' +
+          '</div>' +
+        '</div></article>';
     }).join('');
   } catch (e) {
-    $('list').innerHTML = '<p class="err">Could not load incidents: ' + esc(e.message) + '</p>';
+    $('list').innerHTML = '<div class="empty-state err">Could not load incidents: ' + esc(e.message) + '</div>';
   }
 }
 
-async function setStatus(id, status) {
-  await fetch('/api/incidents/' + id + '/status', {
-    method: 'PATCH', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({status})});
-  load();
+async function setStatus(id, status, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/incidents/' + id + '/status', {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({status})});
+    if (!r.ok) throw new Error('Status update failed');
+    await load();
+  } catch (e) {
+    $('list').insertAdjacentHTML('afterbegin', '<div class="empty-state err">' + esc(e.message) + '</div>');
+  }
 }
-
-const $ = id => document.getElementById(id);
 load();
-setInterval(load, 15000);
+setInterval(load, 30000);
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js').catch(() => {});
 </script>
 </body>
 </html>

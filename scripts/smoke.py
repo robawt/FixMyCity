@@ -49,6 +49,14 @@ check("incidents listed (seed + live)", len(inc) >= 8, "%d incidents" % len(inc)
 check("seed separated", any(i["source"] == "seed" for i in inc) and
       any(i["source"] == "live" for i in inc))
 
+qr_req = urllib.request.Request(BASE + "/api/qr?lat=17.440000&lng=78.348900&accuracy=12",
+                                headers={"Accept": "image/png"})
+qr_resp = urllib.request.urlopen(qr_req, timeout=10)
+qr_png = qr_resp.read()
+check("qr endpoint", qr_resp.status == 200 and qr_png.startswith(b"\x89PNG\r\n\x1a\n"),
+      "content-type=%s bytes=%s" % (qr_resp.headers.get("content-type"), len(qr_png)))
+check("qr target header", bool(qr_resp.headers.get("X-FixMyCity-QR-URL")))
+
 req = urllib.request.Request(BASE + "/api/incidents/%s/status" % t1["incident_id"],
                              data=json.dumps({"status": "in_progress"}).encode(),
                              headers={"Content-Type": "application/json"}, method="PATCH")

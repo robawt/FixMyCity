@@ -2,79 +2,243 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b4f6c">
 <title>FixMyCity — Report a civic issue</title>
 <link rel="stylesheet" href="/static/style.css">
+<link rel="manifest" href="/static/manifest.webmanifest">
 </head>
-<body>
-<main class="wrap">
-  <h1>FixMyCity <span class="tag">Hyderabad</span></h1>
-  <p class="muted">Report a civic issue. Photo optional. AI extracts evidence; severity is scored by policy rules.</p>
+<body class="citizen-page">
+<main class="wrap citizen-shell xp-window">
+  <div class="xp-titlebar">
+    <div class="xp-title"><span class="xp-title-icon">🌎</span><strong>FixMyCity — Civic Reporter</strong></div>
+  </div>
+  <div class="xp-toolbar"><span>Citizen Reporting</span><span class="toolbar-spacer"></span><span class="toolbar-status">Lightweight • Hyderabad</span></div>
+  <header class="brandbar">
+    <div class="brand-lockup">
+      <img src="/static/logo.png" class="brand-logo" alt="FixMyCity logo" onerror="this.style.display='none'">
+      <div>
+        <div class="eyebrow">Hyderabad Civic Intelligence</div>
+        <h1>FixMyCity</h1>
+      </div>
+    </div>
+    <span class="tag city-tag">Hyderabad</span>
+  </header>
 
-  <form id="f">
-    <label>Describe the issue
-      <textarea name="text" rows="3" placeholder="e.g. Large pothole near the metro pillar, two-wheelers swerving"></textarea>
-    </label>
+  <section class="hero-card">
+    <div>
+      <span class="hero-kicker">Report it. We triage it.</span>
+      <h2>Turn a messy complaint into a clear civic ticket.</h2>
+      <p class="muted">Add a photo and your description. FixMyCity uses evidence, location and city context to route and prioritize the issue.</p>
+    </div>
+    <div class="signal-strip">
+      <span>📍 Location</span><span>📷 Photo</span><span>🧠 AI triage</span>
+    </div>
+  </section>
 
-    <label>Photo (optional)
+  <form id="f" class="report-card">
+    <div class="section-title"><span class="step">1</span><div><b>Describe the problem</b><span class="muted small">Use your own words — emotion does not affect priority.</span></div></div>
+    <textarea name="text" rows="4" placeholder="e.g. Huge pothole near the school gate; bikes are swerving into traffic"></textarea>
+
+    <div class="section-title"><span class="step">2</span><div><b>Add a photo</b><span class="muted small">A photo helps the AI verify visible damage.</span></div></div>
+    <label class="photo-drop" for="photo">
+      <span class="photo-icon">📷</span>
+      <span><b>Take or upload a photo</b><small>JPG/PNG • up to 6 MB</small></span>
       <input type="file" id="photo" accept="image/*" capture="environment">
     </label>
-    <img id="preview" class="preview hidden" alt="photo preview">
-
-    <div class="row">
-      <button type="button" id="gps">Use my location</button>
-      <span id="loc" class="muted">no location yet</span>
+    <div class="preview-wrap hidden" id="previewWrap">
+      <img id="preview" class="preview" alt="Report photo preview">
+      <button type="button" class="ghost danger-text" id="clearPhoto">Remove photo</button>
     </div>
 
-    <button type="submit" id="submit" disabled>Submit report</button>
+    <div class="section-title"><span class="step">3</span><div><b>Confirm location</b><span class="muted small">GPS is preferred; a location QR can also anchor the report.</span></div></div>
+    <div class="location-panel">
+      <div>
+        <div class="location-status" id="loc">Location not set</div>
+        <div class="muted small" id="locHint">We do not need you to type an address.</div>
+      </div>
+      <button type="button" class="secondary glossy" id="gps">📍 Use my location</button>
+    </div>
+
+    <div class="qr-tools">
+      <div>
+        <b>Generate a QR for this location</b>
+        <p class="muted small">Use this to place a reusable report QR at a street, pole, hotspot or public facility.</p>
+      </div>
+      <button type="button" id="makeQr" class="aero-green glossy" disabled>📱 Generate QR at this location</button>
+    </div>
+    <div id="qrPanel" class="qr-panel hidden">
+      <div class="qr-preview-wrap"><img id="qrPreview" alt="Generated location QR"></div>
+      <div class="qr-copy"><b>Location QR ready</b><p class="muted small" id="qrMeta"></p><div class="row wrap-buttons"><a id="qrOpen" class="button-link" target="_blank" rel="noopener">Open QR</a><a id="qrDownload" class="button-link" download="fixmycity-location-qr.png">Download SVG</a></div></div>
+    </div>
+
+    <button type="submit" id="submit" class="primary-cta" disabled>Analyze & create ticket</button>
   </form>
 
-  <div id="status" class="hidden"></div>
+  <div id="status" class="status hidden"></div>
   <div id="ticket" class="ticket hidden"></div>
-  <p class="muted small">Context data (traffic/weather/hotspots) is SYNTHETIC demo data.</p>
+  <div class="xp-statusbar"><span>Ready</span><span>FixMyCity • Hyderabad</span></div>
+  <p class="muted small footer-note">Context data (traffic, weather and hotspots) is SYNTHETIC demo data — not live municipal data.</p>
 </main>
 
 <script>
 const qs = new URLSearchParams(location.search);
 const site = qs.get('site');
-let lat = null, lng = null, acc = null;
+const qrLat = Number(qs.get('lat'));
+const qrLng = Number(qs.get('lng'));
+const qrAccuracy = Number(qs.get('qr_accuracy'));
+let lat = Number.isFinite(qrLat) ? qrLat : null;
+let lng = Number.isFinite(qrLng) ? qrLng : null;
+let acc = Number.isFinite(qrAccuracy) ? qrAccuracy : null;
 
 const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+function markLocation(source) {
+  if (lat === null || lng === null) return;
+  $('loc').textContent = `${source}: ${lat.toFixed(5)}, ${lng.toFixed(5)}${acc !== null ? ` (±${Math.round(acc)}m)` : ''}`;
+  $('locHint').textContent = source === 'QR location'
+    ? 'This report page was opened with a location-anchored QR. Your GPS can refine it.'
+    : 'Location captured. You can now submit or generate a reusable QR.';
+  $('submit').disabled = false;
+  $('makeQr').disabled = false;
+}
+
+if (lat !== null) markLocation('QR location');
+else if (navigator.geolocation) {
+  $('locHint').textContent = 'Requesting your location…';
+  navigator.geolocation.getCurrentPosition(
+    p => { lat = p.coords.latitude; lng = p.coords.longitude; acc = p.coords.accuracy; markLocation('GPS'); },
+    () => { $('locHint').textContent = 'Tap “Use my location” to continue.'; },
+    {enableHighAccuracy: true, timeout: 8000, maximumAge: 30000}
+  );
+}
 
 $('gps').onclick = () => {
-  $('loc').textContent = 'locating…';
+  $('loc').textContent = 'Locating…';
+  $('locHint').textContent = 'Requesting a precise browser location.';
   navigator.geolocation.getCurrentPosition(
-    p => { lat = p.coords.latitude; lng = p.coords.longitude; acc = p.coords.accuracy;
-           $('loc').textContent = lat.toFixed(5) + ', ' + lng.toFixed(5) + ' (±' + Math.round(acc) + 'm)';
-           $('submit').disabled = false; },
-    e => { $('loc').textContent = 'location failed: ' + e.message; },
-    {enableHighAccuracy: true, timeout: 10000});
+    p => { lat = p.coords.latitude; lng = p.coords.longitude; acc = p.coords.accuracy; markLocation('GPS'); },
+    e => { $('loc').textContent = 'Location unavailable'; $('locHint').textContent = e.message; },
+    {enableHighAccuracy: true, timeout: 10000, maximumAge: 0}
+  );
 };
 
-$('photo').onchange = e => {
+let compressedPhoto = null;
+let photoObjectUrl = null;
+
+async function optimizePhoto(file) {
+  if (!file || !file.type.startsWith('image/')) return file;
+  if (file.size <= 900 * 1024) return file;
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = url;
+    });
+    const maxSide = 1440;
+    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const ctx = canvas.getContext('2d', {alpha: false});
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.78));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], 'fixmycity-photo.jpg', {type: 'image/jpeg', lastModified: Date.now()});
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+$('photo').onchange = async e => {
   const f = e.target.files[0];
-  if (!f) { $('preview').classList.add('hidden'); return; }
-  $('preview').src = URL.createObjectURL(f);
-  $('preview').classList.remove('hidden');
+  compressedPhoto = null;
+  if (photoObjectUrl) URL.revokeObjectURL(photoObjectUrl);
+  if (!f) { $('previewWrap').classList.add('hidden'); return; }
+  photoObjectUrl = URL.createObjectURL(f);
+  $('preview').src = photoObjectUrl;
+  $('previewWrap').classList.remove('hidden');
+  if (f.size > 900 * 1024) {
+    try {
+      compressedPhoto = await optimizePhoto(f);
+      $('locHint').textContent = `Photo ready • ${(compressedPhoto.size / 1024 / 1024).toFixed(1)} MB upload size`;
+    } catch (_) {
+      compressedPhoto = f;
+    }
+  } else {
+    compressedPhoto = f;
+  }
+};
+$('clearPhoto').onclick = () => {
+  $('photo').value = '';
+  compressedPhoto = null;
+  if (photoObjectUrl) URL.revokeObjectURL(photoObjectUrl);
+  photoObjectUrl = null;
+  $('previewWrap').classList.add('hidden');
+};
+
+let qrObjectUrl = null;
+
+$('makeQr').onclick = async () => {
+  if (lat === null || lng === null) {
+    show('status', 'Location required — tap “Use my location” first.', true);
+    return;
+  }
+  $('makeQr').disabled = true;
+  $('makeQr').textContent = 'Generating…';
+  try {
+    const params = new URLSearchParams({lat: lat.toFixed(6), lng: lng.toFixed(6)});
+    if (acc !== null) params.set('accuracy', String(Math.round(acc)));
+    const r = await fetch(`/api/qr?${params.toString()}`, {cache: 'no-store', headers: {'Accept': 'image/png'}});
+    if (!r.ok) {
+      let detail = `QR generation failed (${r.status})`;
+      try { const d = await r.json(); detail = d.detail || detail; } catch (_) {}
+      throw new Error(detail);
+    }
+    const png = await r.arrayBuffer();
+    const bytes = new Uint8Array(png);
+    if (bytes.length < 8 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47) throw new Error('QR server returned invalid image data.');
+    if (qrObjectUrl) URL.revokeObjectURL(qrObjectUrl);
+    const blob = new Blob([png], {type: 'image/png'});
+    qrObjectUrl = URL.createObjectURL(blob);
+    $('qrPreview').src = qrObjectUrl;
+    $('qrOpen').href = qrObjectUrl;
+    $('qrDownload').href = qrObjectUrl;
+    const qrUrl = r.headers.get('X-FixMyCity-QR-URL');
+    $('qrMeta').textContent = qrUrl
+      ? `Ready for ${lat.toFixed(5)}, ${lng.toFixed(5)} • opens ${qrUrl}`
+      : `Anchored to ${lat.toFixed(5)}, ${lng.toFixed(5)}.`;
+    $('qrPanel').classList.remove('hidden');
+    show('status', 'Location QR generated successfully.', false);
+  } catch (e) {
+    show('status', e.message || 'QR generation failed.', true);
+  } finally {
+    $('makeQr').disabled = false;
+    $('makeQr').textContent = '📱 Generate QR at this location';
+  }
 };
 
 $('f').onsubmit = async e => {
   e.preventDefault();
   const fd = new FormData();
   const t = e.target.text.value.trim();
-  if (t) fd.append('text', t);
   const ph = $('photo').files[0];
-  if (ph) fd.append('photo', ph);
   if (!t && !ph) { show('status', 'Add text or a photo.', true); return; }
-  if (lat === null) { show('status', 'Location required — click "Use my location".', true); return; }
+  if (lat === null || lng === null) { show('status', 'Location required — tap “Use my location”.', true); return; }
+  if (t) fd.append('text', t);
+  if (ph) fd.append('photo', compressedPhoto || ph);
   fd.append('lat', lat); fd.append('lng', lng);
   if (acc !== null) fd.append('accuracy', acc);
   fd.append('timestamp', new Date().toISOString());
   if (site) fd.append('site_id', site);
+  if (Number.isFinite(qrLat) && Number.isFinite(qrLng)) { fd.append('qr_lat', qrLat); fd.append('qr_lng', qrLng); }
 
   $('submit').disabled = true;
   $('ticket').classList.add('hidden');
-  show('status', 'Analyzing report with AI… (can take ~15s)', false);
+  show('status', 'Analyzing evidence and creating your ticket…', false);
   const t0 = Date.now();
   try {
     const r = await fetch('/api/reports', {method: 'POST', body: fd});
@@ -92,32 +256,28 @@ $('f').onsubmit = async e => {
 function show(id, msg, isErr) {
   const el = $(id);
   el.textContent = msg;
-  el.className = isErr ? 'err' : 'muted';
+  el.className = isErr ? 'status err' : 'status muted';
 }
 
 function renderTicket(d, secs) {
-  const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  const reasons = Object.entries(d.severity_reasons)
+  const reasons = Object.entries(d.severity_reasons || {})
     .map(([k, v]) => '<li><b>' + esc(k) + '</b>: ' + v.map(esc).join('; ') + '</li>').join('');
   const list = (t, a) => a && a.length ? '<li><b>' + t + '</b>: ' + a.map(esc).join('; ') + '</li>' : '';
   $('ticket').innerHTML =
-    '<h2>Ticket #' + d.incident_id + (d.duplicate_of ? ' <span class="tag">grouped with existing incident</span>' : '') + '</h2>' +
+    '<div class="ticket-head"><div><span class="hero-kicker">Ticket created</span><h2>#' + d.incident_id + '</h2></div><span class="tag live">Live submission</span></div>' +
     '<div class="badges">' +
-    '<span class="badge sev' + d.urgency + '">urgency ' + d.urgency + '/5</span>' +
+    '<span class="badge sev' + d.urgency + '">Urgency ' + d.urgency + '/5</span>' +
     '<span class="badge">' + esc(d.issue_type) + '</span>' +
-    '<span class="badge">' + esc(d.service_owner) + '</span>' +
-    (d.review_flag ? '<span class="badge review">needs review' + (d.verification === 'urgent' ? ' — URGENT' : '') + '</span>' : '') +
+    '<span class="badge owner-badge">' + esc(d.service_owner) + '</span>' +
+    (d.review_flag ? '<span class="badge review">Needs review' + (d.verification === 'urgent' ? ' — URGENT' : '') + '</span>' : '') +
     '</div>' +
-    '<p>' + esc(d.summary) + '</p>' +
-    '<ul class="kv">' +
-    list('Observed evidence', d.observed) + list('Unverified claims', d.claimed) + list('Missing info', d.missing) +
-    '<li><b>Confidence</b>: ' + d.confidence + '</li>' +
-    '<li><b>Reports on this incident</b>: ' + d.report_count + '</li>' +
-    reasons +
-    '</ul>' +
-    '<p class="muted small">AI provider: ' + esc(d.ai_provider) + ' · processed in ' + secs + 's · ' + esc(d.context_label) + '</p>';
+    '<p class="ticket-summary">' + esc(d.summary) + '</p>' +
+    '<div class="ticket-grid"><div><div class="mini-label">Evidence</div><ul class="kv">' + list('Observed', d.observed) + list('Unverified', d.claimed) + list('Missing', d.missing) + '</ul></div>' +
+    '<div><div class="mini-label">Why this priority</div><ul class="kv">' + reasons + '</ul></div></div>' +
+    '<div class="ticket-foot">Confidence: ' + d.confidence + ' · Reports on incident: ' + d.report_count + ' · ' + esc(d.context_label) + ' · processed in ' + secs + 's</div>';
   $('ticket').classList.remove('hidden');
 }
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js').catch(() => {});
 </script>
 </body>
 </html>

@@ -1,0 +1,9 @@
+{
+  "name": "FixMyCity",
+  "short_name": "FixMyCity",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#8adfff",
+  "theme_color": "#0b5fbd",
+  "icons": [{"src":"/static/logo.png","sizes":"256x256","type":"image/png","purpose":"any maskable"}]
+}

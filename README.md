@@ -21,7 +21,7 @@ uv run python scripts/reset_demo.py             # restore to pristine seeded sta
 uv run python scripts/make_qr.py "http://<LAN-IP>:8000/?site=HACKATHON-BOOTH-1"
 ```
 
-QR is written to docs/demo-qr.svg — open it in a browser and let judges scan it.
+QR is written to docs/demo-qr.png — open it in a browser and let judges scan it.
 If the venue Wi-Fi has client isolation (phone can't reach laptop), run the demo
 on the laptop browser, or serve from a laptop hotspot.
 
@@ -46,3 +46,20 @@ uv run python scripts/live_kimi_test.py 8000 # one real Kimi text+photo call
 - source='live' rows: real submissions. source='seed' rows: synthetic demo data.
 - All context (traffic/weather/hotspots/jurisdiction) is SYNTHETIC — labeled in API responses.
 - AI extracts evidence only; severity/urgency is computed by server/severity.py policy code.
+
+
+## Vercel deployment (hackathon demo)
+
+Vercel supports FastAPI on its Python runtime. This repo exposes the FastAPI app through the root `main.py`, so it can be imported directly by Vercel.
+
+1. Push the `app/` folder to a GitHub repository.
+2. In Vercel: **Add New Project → Import Git Repository → select the repo**.
+3. Keep the project root at the repository root and deploy.
+4. Optional environment variables:
+   - `FMC_AI_PROVIDER=mock` for the demo without a Kimi key.
+   - `KIMI_API_KEY` and `KIMI_MODEL` when real Kimi inference is available.
+5. After deployment, use the public `https://<project>.vercel.app/` URL for QR codes.
+
+### Demo-storage limitation
+
+Vercel's serverless runtime is not a durable filesystem/database. The Vercel configuration therefore uses `/tmp` storage and automatically seeds the synthetic demo incidents on a cold start. This is suitable for the hackathon/demo, but it is **not persistent multi-user production storage**. For production, move incident data to a durable database (for example Postgres/Neon) and uploaded photos to durable object storage such as Vercel Blob.

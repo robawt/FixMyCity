@@ -9,9 +9,8 @@ dependencies = [
     "pydantic>=2.7",
     "python-dotenv>=1.0",
     "python-multipart>=0.0.9",
+    "qrcode>=8.2",
 ]
 
 [dependency-groups]
-dev = [
-    "qrcode>=8.2",
-]
+dev = []

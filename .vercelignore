@@ -1,0 +1,9 @@
+# Local/demo-only state; Vercel bootstraps its own ephemeral demo DB.
+data/
+uploads/
+.venv/
+__pycache__/
+*.pyc
+.env
+docs/demo-qr.png
+.git/

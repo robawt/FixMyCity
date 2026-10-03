@@ -5,7 +5,10 @@ import os
 import sqlite3
 from datetime import datetime
 
-DB_PATH = os.environ.get("FMC_DB") or os.path.join(os.path.dirname(__file__), "..", "data", "fixmycity.db")
+IS_VERCEL = os.environ.get("VERCEL") == "1"
+DEFAULT_DB_PATH = ("/tmp/fixmycity.db" if IS_VERCEL
+                   else os.path.join(os.path.dirname(__file__), "..", "data", "fixmycity.db"))
+DB_PATH = os.environ.get("FMC_DB") or DEFAULT_DB_PATH
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS reports (
@@ -67,12 +70,18 @@ def insert_incident(db: sqlite3.Connection, **kw) -> int:
 
 
 def bump_incident(db: sqlite3.Connection, incident_id: int, urgency: int,
-                  severity: dict, context: dict, now: datetime) -> int:
+                  severity: dict, context: dict, now: datetime,
+                  photo_path: str | None = None) -> int:
+    # Preserve the first available photo so a grouped incident still shows
+    # visual evidence in the admin dashboard.
+    row = db.execute("SELECT photo_path FROM incidents WHERE id=?", (incident_id,)).fetchone()
+    existing_photo = row["photo_path"] if row else None
+    chosen_photo = existing_photo or photo_path
     db.execute(
         "UPDATE incidents SET report_count=report_count+1, last_report_at=?,"
-        " urgency=?, severity_json=?, context_json=? WHERE id=?",
+        " urgency=?, severity_json=?, context_json=?, photo_path=? WHERE id=?",
         (now.isoformat(timespec="seconds"), urgency, json.dumps(severity),
-         json.dumps(context), incident_id))
+         json.dumps(context), chosen_photo, incident_id))
     db.commit()
     return db.execute("SELECT report_count FROM incidents WHERE id=?",
                       (incident_id,)).fetchone()["report_count"]
