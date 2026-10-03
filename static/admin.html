@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FixMyCity — Admin dashboard</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main class="wrap wide">
+  <h1>FixMyCity <span class="tag">Admin</span></h1>
+  <p class="muted">Incidents sorted by urgency. <span class="tag seed">seed</span> = synthetic demo data, <span class="tag live">live</span> = real submissions. Context data is SYNTHETIC.</p>
+  <div id="list">loading…</div>
+</main>
+
+<script>
+const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+async function load() {
+  try {
+    const r = await fetch('/api/incidents');
+    const d = await r.json();
+    if (!d.incidents.length) { $('list').innerHTML = '<p class="muted">No incidents yet.</p>'; return; }
+    $('list').innerHTML = d.incidents.map(i => {
+      const reasons = i.severity && i.severity.dimensions
+        ? Object.entries(i.severity.dimensions).map(([k, v]) =>
+            (v.reasons || []).map(x => '<li><b>' + esc(k) + '</b>: ' + esc(x) + '</li>').join('')).join('')
+          + (i.severity.overrides || []).map(o => '<li><b>override</b>: ' + esc(o) + '</li>').join('')
+        : '';
+      const photo = i.photo_path ? '<a href="/uploads/' + esc(i.photo_path) + '" target="_blank">photo</a>' : '';
+      return '<div class="card' + (i.review_flag ? ' needsreview' : '') + '">' +
+        '<div class="cardhead">' +
+        '<span class="badge sev' + i.urgency + '">urgency ' + i.urgency + '</span>' +
+        '<b>#' + i.id + ' ' + esc(i.issue_type) + '</b>' +
+        '<span class="tag ' + (i.source === 'seed' ? 'seed' : 'live') + '">' + esc(i.source) + '</span>' +
+        (i.review_flag ? '<span class="badge review">review' + (i.verification === 'urgent' ? ' URGENT' : '') + '</span>' : '') +
+        '</div>' +
+        '<p>' + esc(i.summary) + '</p>' +
+        '<div class="meta">owner: <b>' + esc(i.service_owner) + '</b> · reports: ' + i.report_count +
+        ' · confidence: ' + i.confidence + ' · zone: ' + esc(i.context.zone || '?') +
+        ' · status: ' + esc(i.status) + ' ' + photo + '</div>' +
+        (reasons ? '<ul class="kv small">' + reasons + '</ul>' : '') +
+        '<div class="row">' +
+        '<button onclick="setStatus(' + i.id + ',\'in_progress\')">in progress</button>' +
+        '<button onclick="setStatus(' + i.id + ',\'resolved\')">resolve</button>' +
+        '<button onclick="setStatus(' + i.id + ',\'open\')">reopen</button>' +
+        '</div></div>';
+    }).join('');
+  } catch (e) {
+    $('list').innerHTML = '<p class="err">Could not load incidents: ' + esc(e.message) + '</p>';
+  }
+}
+
+async function setStatus(id, status) {
+  await fetch('/api/incidents/' + id + '/status', {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status})});
+  load();
+}
+
+const $ = id => document.getElementById(id);
+load();
+setInterval(load, 15000);
+</script>
+</body>
+</html>

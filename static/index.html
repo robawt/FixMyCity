@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FixMyCity — Report a civic issue</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main class="wrap">
+  <h1>FixMyCity <span class="tag">Hyderabad</span></h1>
+  <p class="muted">Report a civic issue. Photo optional. AI extracts evidence; severity is scored by policy rules.</p>
+
+  <form id="f">
+    <label>Describe the issue
+      <textarea name="text" rows="3" placeholder="e.g. Large pothole near the metro pillar, two-wheelers swerving"></textarea>
+    </label>
+
+    <label>Photo (optional)
+      <input type="file" id="photo" accept="image/*" capture="environment">
+    </label>
+    <img id="preview" class="preview hidden" alt="photo preview">
+
+    <div class="row">
+      <button type="button" id="gps">Use my location</button>
+      <span id="loc" class="muted">no location yet</span>
+    </div>
+
+    <button type="submit" id="submit" disabled>Submit report</button>
+  </form>
+
+  <div id="status" class="hidden"></div>
+  <div id="ticket" class="ticket hidden"></div>
+  <p class="muted small">Context data (traffic/weather/hotspots) is SYNTHETIC demo data.</p>
+</main>
+
+<script>
+const qs = new URLSearchParams(location.search);
+const site = qs.get('site');
+let lat = null, lng = null, acc = null;
+
+const $ = id => document.getElementById(id);
+
+$('gps').onclick = () => {
+  $('loc').textContent = 'locating…';
+  navigator.geolocation.getCurrentPosition(
+    p => { lat = p.coords.latitude; lng = p.coords.longitude; acc = p.coords.accuracy;
+           $('loc').textContent = lat.toFixed(5) + ', ' + lng.toFixed(5) + ' (±' + Math.round(acc) + 'm)';
+           $('submit').disabled = false; },
+    e => { $('loc').textContent = 'location failed: ' + e.message; },
+    {enableHighAccuracy: true, timeout: 10000});
+};
+
+$('photo').onchange = e => {
+  const f = e.target.files[0];
+  if (!f) { $('preview').classList.add('hidden'); return; }
+  $('preview').src = URL.createObjectURL(f);
+  $('preview').classList.remove('hidden');
+};
+
+$('f').onsubmit = async e => {
+  e.preventDefault();
+  const fd = new FormData();
+  const t = e.target.text.value.trim();
+  if (t) fd.append('text', t);
+  const ph = $('photo').files[0];
+  if (ph) fd.append('photo', ph);
+  if (!t && !ph) { show('status', 'Add text or a photo.', true); return; }
+  if (lat === null) { show('status', 'Location required — click "Use my location".', true); return; }
+  fd.append('lat', lat); fd.append('lng', lng);
+  if (acc !== null) fd.append('accuracy', acc);
+  fd.append('timestamp', new Date().toISOString());
+  if (site) fd.append('site_id', site);
+
+  $('submit').disabled = true;
+  $('ticket').classList.add('hidden');
+  show('status', 'Analyzing report with AI… (can take ~15s)', false);
+  const t0 = Date.now();
+  try {
+    const r = await fetch('/api/reports', {method: 'POST', body: fd});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'submission failed');
+    $('status').classList.add('hidden');
+    renderTicket(d, ((Date.now() - t0) / 1000).toFixed(1));
+  } catch (err) {
+    show('status', 'Could not submit: ' + err.message + '. Please try again.', true);
+  } finally {
+    $('submit').disabled = false;
+  }
+};
+
+function show(id, msg, isErr) {
+  const el = $(id);
+  el.textContent = msg;
+  el.className = isErr ? 'err' : 'muted';
+}
+
+function renderTicket(d, secs) {
+  const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const reasons = Object.entries(d.severity_reasons)
+    .map(([k, v]) => '<li><b>' + esc(k) + '</b>: ' + v.map(esc).join('; ') + '</li>').join('');
+  const list = (t, a) => a && a.length ? '<li><b>' + t + '</b>: ' + a.map(esc).join('; ') + '</li>' : '';
+  $('ticket').innerHTML =
+    '<h2>Ticket #' + d.incident_id + (d.duplicate_of ? ' <span class="tag">grouped with existing incident</span>' : '') + '</h2>' +
+    '<div class="badges">' +
+    '<span class="badge sev' + d.urgency + '">urgency ' + d.urgency + '/5</span>' +
+    '<span class="badge">' + esc(d.issue_type) + '</span>' +
+    '<span class="badge">' + esc(d.service_owner) + '</span>' +
+    (d.review_flag ? '<span class="badge review">needs review' + (d.verification === 'urgent' ? ' — URGENT' : '') + '</span>' : '') +
+    '</div>' +
+    '<p>' + esc(d.summary) + '</p>' +
+    '<ul class="kv">' +
+    list('Observed evidence', d.observed) + list('Unverified claims', d.claimed) + list('Missing info', d.missing) +
+    '<li><b>Confidence</b>: ' + d.confidence + '</li>' +
+    '<li><b>Reports on this incident</b>: ' + d.report_count + '</li>' +
+    reasons +
+    '</ul>' +
+    '<p class="muted small">AI provider: ' + esc(d.ai_provider) + ' · processed in ' + secs + 's · ' + esc(d.context_label) + '</p>';
+  $('ticket').classList.remove('hidden');
+}
+</script>
+</body>
+</html>
