@@ -7,11 +7,23 @@ Hyderabad civic-AI hackathon demo: citizen report -> AI evidence extraction (Kim
 ```bash
 uv sync
 uv run python -m server.seed          # one-time: 7 synthetic demo incidents
-uv run uvicorn server.main:app --port 8000
+uv run uvicorn server.main:app --host 0.0.0.0 --port 8000
 ```
 
 - Citizen page: http://127.0.0.1:8000/  (QR flow: add ?site=SITE_ID)
 - Admin dashboard: http://127.0.0.1:8000/admin
+- Phone demo (same Wi-Fi): use the LAN IP, e.g. http://192.168.0.22:8000/
+
+## Demo day
+
+```bash
+uv run python scripts/reset_demo.py --reseed   # restore to seeded-only state
+uv run python scripts/make_qr.py "http://<LAN-IP>:8000/?site=HACKATHON-BOOTH-1"
+```
+
+QR is written to docs/demo-qr.svg — open it in a browser and let judges scan it.
+If the venue Wi-Fi has client isolation (phone can't reach laptop), run the demo
+on the laptop browser, or serve from a laptop hotspot.
 
 ## Config (.env, never commit)
 

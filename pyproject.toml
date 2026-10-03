@@ -10,3 +10,8 @@ dependencies = [
     "python-dotenv>=1.0",
     "python-multipart>=0.0.9",
 ]
+
+[dependency-groups]
+dev = [
+    "qrcode>=8.2",
+]
