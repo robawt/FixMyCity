@@ -17,7 +17,7 @@ uv run uvicorn server.main:app --host 0.0.0.0 --port 8000
 ## Demo day
 
 ```bash
-uv run python scripts/reset_demo.py --reseed   # restore to seeded-only state
+uv run python scripts/reset_demo.py             # restore to pristine seeded state (IDs 1-7)
 uv run python scripts/make_qr.py "http://<LAN-IP>:8000/?site=HACKATHON-BOOTH-1"
 ```
 
